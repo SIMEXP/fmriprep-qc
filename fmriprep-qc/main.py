@@ -20,17 +20,17 @@ def build_app(derivatives_path):
         "confoundcorr": "Correlations among nuisance regressors",
         "rois": "Brain mask and (temporal/anatomical) CompCor ROIs",
     }
+    default_preproc_step = "carpetplot"
 
     def list_runs(subject):
         paths = sorted(
             [
                 os.path.basename(p)
                 for p in glob.glob(
-                    f"{derivatives_path}/sub-{subject}/figures/*desc-carpetplot_bold.svg"
+                    f"{derivatives_path}/sub-{subject}/figures/*desc-{default_preproc_step}_bold.svg"
                 )
             ]
         )
-        print(paths)
         runs = [
             "_".join(
                 [
@@ -102,7 +102,7 @@ def build_app(derivatives_path):
                 ],
                 value=preproc_steps[0][1],
             ),
-            html.ObjectEl(id="image", width="100%"),
+            html.ObjectEl(id="image", style={'width': "100%"}),
         ]
     )
 
@@ -131,7 +131,7 @@ def build_app(derivatives_path):
     def update_image_src(subject, fname, step):
         if fname:
             return os.path.join(
-                static_image_route, subject, fname.replace("-sdc_", "-%s_" % step)
+                static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step))
             )
 
     @app.server.route("/images/<subject>/<image_path>")
