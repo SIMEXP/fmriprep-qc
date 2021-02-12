@@ -6,26 +6,27 @@ import dash_html_components as html
 import flask
 import glob
 import os
+import re
 
 
 def build_app(derivatives_path):
 
     static_image_route = "/images/"
     image_directory = os.getcwd()
-    preproc_steps = [
-        ("Susceptibility distortion correction", "sdc"),
-        ("Alignment of functional and anatomical MRI data", "bbregister"),
-        ("Brain mask and (temporal/anatomical) CompCor ROIs", "rois"),
-        ("BOLD Summary", "carpetplot"),
-        ("Correlations among nuisance regressors", "confoundcorr"),
-    ]
+    preproc_steps_template = {
+        "sdc": "Susceptibility distortion correction",
+        "bbregister": "Alignment of functional and anatomical MRI data",
+        "carpetplot": "BOLD Summary",
+        "confoundcorr": "Correlations among nuisance regressors",
+        "rois": "Brain mask and (temporal/anatomical) CompCor ROIs",
+    }
 
     def list_runs(subject):
         paths = sorted(
             [
                 os.path.basename(p)
                 for p in glob.glob(
-                    f"{derivatives_path}/sub-{subject}/figures/*desc-sdc_bold.svg"
+                    f"{derivatives_path}/sub-{subject}/figures/*desc-carpetplot_bold.svg"
                 )
             ]
         )
@@ -42,6 +43,23 @@ def build_app(derivatives_path):
         ]
         return runs, paths
 
+    def check_preproc_steps(subject, run):
+        svgs = sorted(
+            [
+                os.path.basename(p)
+                for p in glob.glob(
+                    f"{derivatives_path}/sub-{subject}/figures/sub-{subject}_{run}_desc-*_bold.svg"
+                )
+            ]
+        )
+
+        preproc_steps_names = [
+                re.match(".*?desc-(.*?)_bold.svg", svg)[1]
+                for svg in svgs
+            ]
+
+        return preproc_steps_names
+
     subjects = sorted(
         [
             os.path.basename(p[:-1]).split("-")[1]
@@ -50,6 +68,15 @@ def build_app(derivatives_path):
     )
     default_runs = [
         {"label": run, "value": path} for run, path in zip(*list_runs(subjects[0]))
+    ]
+
+    
+    preproc_steps_found = check_preproc_steps(subjects[0], default_runs[0]["label"])
+    preproc_steps = [
+        (preproc_steps_template[preproc_step_found], preproc_step_found)
+        for preproc_step_found in preproc_steps_found
+        if preproc_step_found in list(preproc_steps_template.keys())
+
     ]
 
     app = dash.Dash()
