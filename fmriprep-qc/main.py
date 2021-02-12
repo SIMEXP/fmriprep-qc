@@ -2,12 +2,12 @@ import argparse
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+from dash_extensions import Keyboard
 
 import flask
 import glob
 import os
 import re
-
 
 def build_app(derivatives_path):
 
@@ -21,6 +21,7 @@ def build_app(derivatives_path):
         "rois": "Brain mask and (temporal/anatomical) CompCor ROIs",
     }
     default_preproc_step = "carpetplot"
+    idx_fname = 0
 
     def list_runs(subject):
         paths = sorted(
@@ -83,6 +84,8 @@ def build_app(derivatives_path):
 
     app.layout = html.Div(
         [
+            Keyboard(id="keyboard"),
+            dcc.Store(id='idx_fname', data=0),
             dcc.Dropdown(
                 id="subject-dropdown",
                 options=[
@@ -106,6 +109,22 @@ def build_app(derivatives_path):
         ]
     )
 
+    # @app.callback(
+    #     #TODO tmp
+    #     dash.dependencies.Output("output", "children"),
+    #     [
+    #         dash.dependencies.Input("keyboard", "keydown"),
+    #         dash.dependencies.Input("keyboard", "n_keydowns"),
+    #     ]
+    # )
+    # #here n_keydowns is used to refresh keyboard event
+    # def keypress_change_run(key_status, n_press):
+    #     print(key_status)
+    #     if key_status["key"] == "ArrowRight":
+    #         print("RIGHT!!")
+    #     if key_status["key"] == "ArrowLeft":
+    #         print("LEFT!!")
+
     @app.callback(
         dash.dependencies.Output("run-dropdown", "options"),
         [dash.dependencies.Input("subject-dropdown", "value")],
@@ -126,9 +145,30 @@ def build_app(derivatives_path):
             dash.dependencies.Input("subject-dropdown", "value"),
             dash.dependencies.Input("run-dropdown", "value"),
             dash.dependencies.Input("step-tabs", "value"),
+            dash.dependencies.Input("run-dropdown", "options"),
+            dash.dependencies.Input("keyboard", "keydown"),
+            dash.dependencies.Input("keyboard", "n_keydowns"),
         ],
     )
-    def update_image_src(subject, fname, step):
+    def update_image_src(subject, fname, step, fnames, key_status, n_press):
+        # print("####################")
+        # print([key_status, n_press])
+
+        #https://stackoverflow.com/questions/62731812/how-do-you-store-variables-in-dash-core-components
+        # print(idx_fname)
+        # if key_status:
+        #     if key_status["key"] == "ArrowRight":
+        #         if idx_fname < (len(idx_fname) - 1):
+        #             idx_fname = idx_fname + 1
+        #             return os.path.join(
+        #                 static_image_route, subject, fnames[idx_fname]["value"].replace(f"-{default_preproc_step}_", "-{}_".format(step))
+        #             )
+        #     elif key_status["key"] == "ArrowLeft":
+        #         if idx_fname > 0:
+        #             idx_fname = idx_fname - 1
+        #             return os.path.join(
+        #                 static_image_route, subject, fnames[idx_fname]["value"].replace(f"-{default_preproc_step}_", "-{}_".format(step))
+        #             )
         if fname:
             return os.path.join(
                 static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step))
