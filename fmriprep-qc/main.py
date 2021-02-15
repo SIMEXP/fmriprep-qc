@@ -3,6 +3,7 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 from dash_extensions import Keyboard
+import time
 
 import flask
 import glob
@@ -85,7 +86,7 @@ def build_app(derivatives_path):
     app.layout = html.Div(
         [
             Keyboard(id="keyboard"),
-            dcc.Store(id='idx_fname', data=0),
+            dcc.Store(id='idx_fname', data=idx_fname),
             dcc.Dropdown(
                 id="subject-dropdown",
                 options=[
@@ -109,21 +110,7 @@ def build_app(derivatives_path):
         ]
     )
 
-    # @app.callback(
-    #     #TODO tmp
-    #     dash.dependencies.Output("output", "children"),
-    #     [
-    #         dash.dependencies.Input("keyboard", "keydown"),
-    #         dash.dependencies.Input("keyboard", "n_keydowns"),
-    #     ]
-    # )
-    # #here n_keydowns is used to refresh keyboard event
-    # def keypress_change_run(key_status, n_press):
-    #     print(key_status)
-    #     if key_status["key"] == "ArrowRight":
-    #         print("RIGHT!!")
-    #     if key_status["key"] == "ArrowLeft":
-    #         print("LEFT!!")
+    
 
     @app.callback(
         dash.dependencies.Output("run-dropdown", "options"),
@@ -134,10 +121,54 @@ def build_app(derivatives_path):
 
     @app.callback(
         dash.dependencies.Output("run-dropdown", "value"),
-        [dash.dependencies.Input("subject-dropdown", "value")],
+        [
+            dash.dependencies.Input("subject-dropdown", "value"),
+            dash.dependencies.Input("keyboard", "keydown"),
+            dash.dependencies.Input("keyboard", "n_keydowns"),
+        ],
+        dash.dependencies.State('idx_fname', 'data'),
     )
-    def update_runs_value(subject):
+    def update_runs_value(subject, key_status, n_press, data):
+        if key_status:
+            press_left = (key_status["key"] == "ArrowRight") & (key_status["shiftKey"] == True)
+            press_right = (key_status["key"] == "ArrowLeft") & (key_status["shiftKey"] == True)
+            if press_left | press_right:
+                return list_runs(subject)[1][data]
         return list_runs(subject)[1][0]
+
+    # @app.callback(
+    #     dash.dependencies.Output('press_left', 'data'),
+    #     [
+    #         dash.dependencies.Input("keyboard", "keydown"),
+    #         dash.dependencies.Input("keyboard", "n_keydowns"),
+    #     ],
+    #     dash.dependencies.State('press_left', 'data'),
+    # )
+    # def update_left(key_status, n_press, data):
+    #     if (key_status["key"] == "ArrowRight") & (key_status["shiftKey"] == True)
+
+    @app.callback(
+        dash.dependencies.Output('idx_fname', 'data'),
+        [
+            dash.dependencies.Input("subject-dropdown", "value"),
+            dash.dependencies.Input("keyboard", "keydown"),
+            dash.dependencies.Input("keyboard", "n_keydowns"),
+        ],
+        dash.dependencies.State('idx_fname', 'data'),
+    )
+    def update_idx_fname(subject, key_status, n_press, data):
+        fnames = list_runs(subject)[1]
+        print("{} idx - {} \n key-status {}".format("update_idx_fname", data, key_status))
+
+        if key_status:
+            if (key_status["key"] == "ArrowRight") & (key_status["shiftKey"] == True):
+                if data < (len(fnames) - 1):
+                    data = data + 1
+            elif (key_status["key"] == "ArrowLeft") & (key_status["shiftKey"] == True):
+                if data > 0:
+                    data = data - 1
+                    
+        return data
 
     @app.callback(
         dash.dependencies.Output("image", "data"),
@@ -149,30 +180,25 @@ def build_app(derivatives_path):
             dash.dependencies.Input("keyboard", "keydown"),
             dash.dependencies.Input("keyboard", "n_keydowns"),
         ],
+        dash.dependencies.State('idx_fname', 'data'),
     )
-    def update_image_src(subject, fname, step, fnames, key_status, n_press):
+    def update_image_src(subject, fname, step, fnames, key_status, n_press, data):
         # print("####################")
         # print([key_status, n_press])
 
         #https://stackoverflow.com/questions/62731812/how-do-you-store-variables-in-dash-core-components
-        # print(idx_fname)
-        # if key_status:
-        #     if key_status["key"] == "ArrowRight":
-        #         if idx_fname < (len(idx_fname) - 1):
-        #             idx_fname = idx_fname + 1
-        #             return os.path.join(
-        #                 static_image_route, subject, fnames[idx_fname]["value"].replace(f"-{default_preproc_step}_", "-{}_".format(step))
-        #             )
-        #     elif key_status["key"] == "ArrowLeft":
-        #         if idx_fname > 0:
-        #             idx_fname = idx_fname - 1
-        #             return os.path.join(
-        #                 static_image_route, subject, fnames[idx_fname]["value"].replace(f"-{default_preproc_step}_", "-{}_".format(step))
-        #             )
+        idx_fname = data
+        print("{} idx - {} press- {} \n key-status {}".format("update_image_src", idx_fname, n_press, key_status))
+
         if fname:
+            if key_status:
+                if key_status["shiftKey"] == True:
+                    return os.path.join(
+                                static_image_route, subject, fnames[idx_fname]["value"].replace(f"-{default_preproc_step}_", "-{}_".format(step))
+                    )
             return os.path.join(
-                static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step))
-            )
+                    static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step))
+                )
 
     @app.server.route("/images/<subject>/<image_path>")
     def serve_image(subject, image_path):
