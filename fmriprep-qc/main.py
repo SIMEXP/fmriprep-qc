@@ -173,7 +173,6 @@ def build_app(derivatives_path):
                     
         return fname_idx
 
-
     @app.callback(
         dash.dependencies.Output("run-dropdown", "value"),
         [
@@ -208,7 +207,6 @@ def build_app(derivatives_path):
 
     @app.server.route("/images/<subject>/<image_path>")
     def serve_image(subject, image_path):
-        print(subject, image_path)
         image_directory = os.path.abspath(
             os.path.join(derivatives_path, "sub-%s" % subject, "figures")
         )
