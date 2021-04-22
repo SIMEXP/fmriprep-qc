@@ -16,13 +16,19 @@ def build_app(derivatives_path):
     image_directory = os.getcwd()
     preproc_steps_template = {
         "sdc": "Susceptibility distortion correction",
-        "bbregister": "Alignment of functional and anatomical MRI data",
+        "bbregister": "Alignment of functional and anatomical MRI data (freesurfer)",
+        "flirtbbr": "Alignment of functional and anatomical MRI data (flirt)",
         "carpetplot": "BOLD Summary",
         "confoundcorr": "Correlations among nuisance regressors",
         "rois": "Brain mask and (temporal/anatomical) CompCor ROIs",
+        "aroma": "ICA-AROMA denoising"
+    }
+    anat_template = {
+        "MNI152NLin6Asym": "Spatial normalization of anatomical MRI to MNI152NLin6Asym.",
+        "MNI152NLin2009cAsym": "Spatial normalization of anatomical MRI to MNI152NLin2009cAsym.",
+        "dseg": "Anatomical brain mask and brain tissue segmentation"
     }
     default_preproc_step = "carpetplot"
-    idx_fname = 0
 
     def list_runs(subject):
         paths = sorted(
@@ -62,6 +68,26 @@ def build_app(derivatives_path):
 
         return preproc_steps_names
 
+    def check_anat(subject):
+        svgs = sorted(
+            [
+                os.path.basename(p)
+                for p in glob.glob(
+                    f"{derivatives_path}/sub-{subject}/figures/sub-{subject}_space-*_T1w.svg"
+                )
+            ]
+        )
+
+        anat_names = [
+                re.match(".*?_space-(.*?)_T1w.svg", svg)[1]
+                for svg in svgs
+            ]
+        seg_file = f"{derivatives_path}/sub-{subject}/figures/sub-{subject}_dseg.svg"
+        if os.path.exists(seg_file):
+            anat_names = anat_names + ["dseg"]
+
+        return anat_names
+
     subjects = sorted(
         [
             os.path.basename(p[:-1]).split("-")[1]
@@ -72,14 +98,20 @@ def build_app(derivatives_path):
         {"label": run, "value": path} for run, path in zip(*list_runs(subjects[0]))
     ]
 
-    
     preproc_steps_found = check_preproc_steps(subjects[0], default_runs[0]["label"])
     preproc_steps = [
         (preproc_steps_template[preproc_step_found], preproc_step_found)
         for preproc_step_found in preproc_steps_found
         if preproc_step_found in list(preproc_steps_template.keys())
-
     ]
+    anat_founds = check_anat(subjects[0])
+    anat_steps = [
+        (anat_template[anat_found], anat_found)
+        for anat_found in anat_founds
+        if anat_found in list(anat_template.keys())
+    ] 
+
+    steps_tab = preproc_steps + anat_steps
 
     app = dash.Dash()
 
@@ -104,11 +136,11 @@ def build_app(derivatives_path):
                 id="step-tabs",
                 children=[
                     dcc.Tab(label=step_name, value=step)
-                    for step_name, step in preproc_steps
+                    for step_name, step in steps_tab
                 ],
                 value=preproc_steps[0][1],
             ),
-            html.ObjectEl(id="image", style={'width': "100%"}),
+            html.Img(id="image", style={'width': "100%"}),
         ]
     ) 
 
@@ -192,7 +224,7 @@ def build_app(derivatives_path):
         return list_runs(subject)[1][0]
 
     @app.callback(
-        dash.dependencies.Output("image", "data"),
+        dash.dependencies.Output("image", "src"),
         [
             dash.dependencies.Input("subject-dropdown", "value"),
             dash.dependencies.Input("run-dropdown", "value"),
@@ -200,22 +232,25 @@ def build_app(derivatives_path):
         ],
     )
     def update_image_src(subject, fname, step):
+        print(fname)
         if fname:
-            return os.path.join(
-                    static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step))
-                )
+            subject_files = os.path.join(
+                    derivatives_path, f"sub-{subject}", "figures", f"sub-{subject}_*.svg")
+            for filepath in glob.glob(subject_files):
+                if step in filepath:
+                    image_file = filepath.split("/")[-1]
+                    return os.path.join(static_image_route, subject, image_file)
 
-    @app.server.route("/images/<subject>/<image_path>")
-    def serve_image(subject, image_path):
+    @app.server.route(f"{static_image_route}<subject>/<image_file>")
+    def serve_image(subject, image_file):
         image_directory = os.path.abspath(
             os.path.join(derivatives_path, "sub-%s" % subject, "figures")
         )
-        if not os.path.exists(os.path.join(image_directory, image_path)):
+        if not os.path.exists(os.path.join(image_directory, image_file)):
             raise RuntimeError("image_path not found")
-        return flask.send_from_directory(image_directory, image_path)
+        return flask.send_from_directory(image_directory, image_file)
 
     return app
-
 
 def parse_args():
     parser = argparse.ArgumentParser(
