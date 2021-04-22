@@ -234,12 +234,20 @@ def build_app(derivatives_path):
     def update_image_src(subject, fname, step):
         print(fname)
         if fname:
-            subject_files = os.path.join(
+            # if selected tab is functionnal data
+            if step in preproc_steps_template.keys():
+                return os.path.join(
+                        static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step)))
+            # else if selected tab is anatomical
+            elif step in anat_template.keys():
+                subject_files = os.path.join(
                     derivatives_path, f"sub-{subject}", "figures", f"sub-{subject}_*.svg")
-            for filepath in glob.glob(subject_files):
-                if step in filepath:
-                    image_file = filepath.split("/")[-1]
-                    return os.path.join(static_image_route, subject, image_file)
+                for filepath in glob.glob(subject_files):
+                    if step in filepath:
+                        image_file = filepath.split("/")[-1]
+                        return os.path.join(static_image_route, subject, image_file)
+            else:
+                raise RuntimeError("tab does not exists")
 
     @app.server.route(f"{static_image_route}<subject>/<image_file>")
     def serve_image(subject, image_file):
