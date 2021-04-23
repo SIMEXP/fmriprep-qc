@@ -1,14 +1,15 @@
 import argparse
-import dash
-import dash_core_components as dcc
-import dash_html_components as html
-from dash_extensions import Keyboard
 import time
-
 import flask
 import glob
 import os
 import re
+import json
+
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash_extensions import Keyboard
 
 def build_app(derivatives_path):
 
@@ -29,6 +30,18 @@ def build_app(derivatives_path):
         "dseg": "Anatomical brain mask and brain tissue segmentation"
     }
     default_preproc_step = "carpetplot"
+
+    dataset = derivatives_path.split("/")[-3]
+    qc_results_dir = os.path.join(os.environ['HOME'], ".fmriprep-qc")
+    qc_results_filepath = os.path.join(qc_results_dir, os.environ['USER'] + "_" + dataset + ".json")
+    if not os.path.exists(qc_results_filepath):
+        if not os.path.exists(qc_results_dir):
+            os.makedirs(qc_results_dir)
+        with open(qc_results_filepath, mode='w', encoding='utf-8') as f:
+            json.dump({}, f)
+    if os.path.exists(qc_results_filepath):
+        with open(qc_results_filepath, mode='r', encoding='utf-8') as f:
+            qc_results_json = json.load(f)
 
     def list_runs(subject):
         paths = sorted(
@@ -132,6 +145,12 @@ def build_app(derivatives_path):
             dcc.Dropdown(
                 id="run-dropdown", options=default_runs, value=default_runs[0]["value"]
             ),
+            html.Button('Fail', id='button_fail', n_clicks=0, style={"background-color": "lightcoral", "font": "20px Arial, sans-serif"}),
+            html.Button('Maybe', id='button_maybe', n_clicks=0, style={"background-color": "lightsalmon", "font": "20px Arial, sans-serif"}),
+            html.Button('Pass', id='button_pass', n_clicks=0, style={"background-color": "lightgreen", "font": "20px Arial, sans-serif"}),
+            html.Div(id='qc_output', style={'whiteSpace': 'pre-line'}),
+            dcc.Input(id="qc_message", type='text'),
+            html.Button('Save message', id='button_message', n_clicks=0, style={"background-color": "white", "font": "18px Arial, sans-serif"}),
             dcc.Tabs(
                 id="step-tabs",
                 children=[
@@ -140,7 +159,7 @@ def build_app(derivatives_path):
                 ],
                 value=preproc_steps[0][1],
             ),
-            html.Img(id="image", style={'width': "100%"}),
+            html.Img(id="image", style={'width': "100%"})
         ]
     ) 
 
@@ -232,12 +251,11 @@ def build_app(derivatives_path):
         ],
     )
     def update_image_src(subject, fname, step):
-        print(fname)
         if fname:
             # if selected tab is functionnal data
             if step in preproc_steps_template.keys():
                 return os.path.join(
-                        static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step)))
+                    static_image_route, subject, fname.replace(f"-{default_preproc_step}_", "-{}_".format(step)))
             # else if selected tab is anatomical
             elif step in anat_template.keys():
                 subject_files = os.path.join(
@@ -248,6 +266,77 @@ def build_app(derivatives_path):
                         return os.path.join(static_image_route, subject, image_file)
             else:
                 raise RuntimeError("tab does not exists")
+
+    # QC json result
+    @app.callback(
+        dash.dependencies.Output('qc_output', 'children'),
+        [
+            dash.dependencies.Input('button_fail', 'n_clicks'),
+            dash.dependencies.Input('button_fail', 'n_clicks_timestamp'),
+            dash.dependencies.Input('button_maybe', 'n_clicks'),
+            dash.dependencies.Input('button_maybe', 'n_clicks_timestamp'),
+            dash.dependencies.Input('button_pass', 'n_clicks'),
+            dash.dependencies.Input('button_pass', 'n_clicks_timestamp'),
+            dash.dependencies.Input("button_message", "n_clicks"),
+            dash.dependencies.Input("subject-dropdown", "value"),
+            dash.dependencies.Input("run-dropdown", "value"),
+            dash.dependencies.Input("qc_message", "value"), 
+        ]
+    )
+    def button_qc_result(
+                btn_fail
+                , btn_fail_timestamp
+                , btn_maybe
+                , btn_maybe_timestamp
+                , btn_pass
+                , btn_pass_timestamp
+                , btn_message
+                , subject
+                , run_value
+                , qc_message):
+        # input parameters
+        session = re.match(f".*?{subject}_(.*?)_desc.*?", run_value)[1]
+        participant = "sub-" + subject
+        changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+        # check if result already exists
+        message = ""
+        status = ""
+        if participant in qc_results_json.keys():
+            if session in qc_results_json[participant].keys():
+                if "message" in qc_results_json[participant][session].keys():
+                    message = qc_results_json[participant][session]["message"]
+                if "status" in qc_results_json[participant][session].keys():
+                    status = qc_results_json[participant][session]["status"]
+            else:
+                qc_results_json[participant][session] = {}
+        else:
+            qc_results_json[participant] = {}
+        if "button_fail" in changed_id:
+            qc_results_json[participant][session]["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            qc_results_json[participant][session]["status"] = "failed"
+            output = f"failed: {message}"
+        elif "button_maybe" in changed_id:
+            qc_results_json[participant][session]["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            qc_results_json[participant][session]["status"] = "maybe"
+            output = f"maybe: {message}"
+        elif "button_pass" in changed_id:
+            qc_results_json[participant][session]["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            qc_results_json[participant][session]["status"] = "passed"
+            output = f"passed: {message}"
+        elif "button_message" in changed_id:
+            qc_results_json[participant][session]["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            qc_results_json[participant][session]["message"] = qc_message
+            output = f"{status}: {qc_message}"
+        else:
+            if (not status) & (not message):
+                output = "empty!"
+            else:
+                output = f"{status}: {message}"
+
+        with open(qc_results_filepath, mode='w', encoding='utf-8') as f:
+            json.dump(qc_results_json, f, indent=2)
+
+        return html.Div(output)
 
     @app.server.route(f"{static_image_route}<subject>/<image_file>")
     def serve_image(subject, image_file):
