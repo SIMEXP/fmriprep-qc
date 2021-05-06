@@ -238,9 +238,7 @@ def build_app(derivatives_path):
         ]
     )
     def update_run_value(subject, fnames, n_press, fname_idx, left_press, right_press):
-        if left_press | right_press:
-            return list_runs(subject)[1][fname_idx]
-        return list_runs(subject)[1][0]
+        return list_runs(subject)[1][fname_idx]
 
     @app.callback(
         dash.dependencies.Output("image", "src"),
