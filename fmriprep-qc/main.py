@@ -31,7 +31,7 @@ def build_app(derivatives_path):
     }
     default_preproc_step = "carpetplot"
 
-    dataset = derivatives_path.split("/")[-3]
+    dataset = derivatives_path.split("/")[-4]
     qc_results_dir = os.path.join(os.environ['HOME'], ".fmriprep-qc")
     qc_results_filepath = os.path.join(qc_results_dir, os.environ['USER'] + "_" + dataset + ".json")
     if not os.path.exists(qc_results_filepath):
